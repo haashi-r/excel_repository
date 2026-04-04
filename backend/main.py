@@ -336,7 +336,8 @@ def fix_schedule(contract: dict) -> list:
 
     # ── 7. Build 12-month schedule ────────────────────────────────────────────
     schedule = []
-    for i in range(12):
+    # for i in range(12):
+    for i in range(int(contract.get("durata_mesi", 60))):
         total_months = start_m + i
         month_idx    = total_months % 12
         year         = start_y + total_months // 12
