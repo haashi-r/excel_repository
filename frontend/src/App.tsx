@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 
-const API = "";
+const API = import.meta.env.VITE_API_URL || "";
 
 type Stage = "idle" | "uploading" | "analyzed" | "generating" | "done" | "error";
 
