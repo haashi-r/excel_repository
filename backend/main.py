@@ -341,7 +341,9 @@ def fix_schedule(contract: dict) -> list:
         total_months = start_m + i
         month_idx    = total_months % 12
         year         = start_y + total_months // 12
-        mese         = MONTHS_IT[month_idx]
+        # mese         = MONTHS_IT[month_idx]
+        mese = f"{MONTHS_IT[month_idx]} {year}"
+
         mon_short    = MONTHS_SHORT[month_idx]
 
         if i < EMPTY_MONTHS:
