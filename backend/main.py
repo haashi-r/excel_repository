@@ -88,8 +88,8 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(title="MetalloDoc API", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://your-app.vercel.app"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

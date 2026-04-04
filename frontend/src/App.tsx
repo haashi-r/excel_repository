@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 
-// Empty string = Vite proxy handles /api/* → http://127.0.0.1:8000
-const API = "";
+const API = import.meta.env.VITE_API_URL || "";
 type Stage = "idle" | "uploading" | "analyzed" | "generating" | "done" | "error";
 
 interface Contract {
