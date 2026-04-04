@@ -366,43 +366,25 @@ MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun",
 #             })
 
 #     return schedule
-EMPTY_MONTHS = 2  # ~40 days grace = approximately 2 months
-
+import calendar
+GRACE_MONTHS = 2 
 def fix_schedule(contract: dict) -> list:
-    """
-    Builds full payment schedule for the entire contract duration.
-    Uses durata_mesi from PDF — NOT hardcoded 12.
-    """
-
-    # ── 1. Contract start date ────────────────────────────────────────────
     date_str = contract.get("data_contratto", "")
     try:
         dt      = datetime.strptime(date_str, "%d/%m/%Y")
-        start_m = dt.month - 1   # 0-based
+        start_m = dt.month - 1
         start_y = dt.year
     except Exception:
-        log.warning(f"Cannot parse date '{date_str}'")
         start_m, start_y = 0, 2026
 
-    # ── 2. Duration from PDF — NOT hardcoded ──────────────────────────────
-    durata_mesi = int(float(str(contract.get("durata_mesi", "12")).replace(",","."))) 
+    durata_mesi = int(float(str(contract.get("durata_mesi", "12")).replace(",",".")))
     if durata_mesi <= 0:
         durata_mesi = 12
-        log.warning("durata_mesi is 0 — defaulting to 12")
 
-    # ── 3. Import amount ──────────────────────────────────────────────────
-    importo = _parse_amount(str(contract.get("importo_contratto", "0")))
-    if importo == 0:
-        log.warning("importo_contratto is 0 — check PDF extraction")
-
-    # ── 4. Annual commission % ────────────────────────────────────────────
+    importo      = _parse_amount(str(contract.get("importo_contratto", "0")))
     comm_annuale = _parse_amount(str(contract.get("commissioni_annuale", "0")))
-    if comm_annuale == 0:
-        log.warning("commissioni_annuale is 0 — check PDF extraction")
-
-    # ── 5. Period percentage ──────────────────────────────────────────────
-    pct_periodo = _parse_amount(str(contract.get("percentuale_per_periodo", "0")))
-    frequenza = str(contract.get("frequenza_pagamento", "semestrale")).lower()
+    pct_periodo  = _parse_amount(str(contract.get("percentuale_per_periodo", "0")))
+    frequenza    = str(contract.get("frequenza_pagamento", "semestrale")).lower()
 
     if pct_periodo == 0 and comm_annuale > 0:
         if "trim" in frequenza:
@@ -410,48 +392,41 @@ def fix_schedule(contract: dict) -> list:
         elif "ann" in frequenza:
             pct_periodo = comm_annuale
         else:
-            pct_periodo = comm_annuale / 2   # semestrale default
+            pct_periodo = comm_annuale / 2
 
-    # ── 6. Amount per payment period ──────────────────────────────────────
     amount_per_period = importo * (pct_periodo / 100)
-    log.info(f"amount_per_period = {importo} × {pct_periodo}% = {amount_per_period}")
 
-    # ── 7. Payment interval in months ────────────────────────────────────
     if "trim" in frequenza:
         payment_interval = 3
     elif "ann" in frequenza:
         payment_interval = 12
     else:
-        payment_interval = 6   # semestrale
+        payment_interval = 6
 
-    # ── 8. Build FULL schedule (durata_mesi rows) ─────────────────────────
     schedule = []
     for i in range(durata_mesi):
         total_months = start_m + i
         month_idx    = total_months % 12
         year         = start_y + total_months // 12
-        mese         = MONTHS_IT[month_idx]
-        mon_short    = MONTHS_SHORT[month_idx]
+        month_1based = month_idx + 1
+        mese         = f"{MONTHS_IT[month_idx]} {year}"
 
-        if i < EMPTY_MONTHS:
-            # Grace/startup period
-            schedule.append({
-                "mese":                       mese,
-                "data_pagamento_commissioni": "",
-                "management_mensile":         "",
-                "_amount":                    0.0,
-            })
-        else:
-            months_active    = i - EMPTY_MONTHS + 1
-            is_payment_month = (months_active % payment_interval == 0)
-            pay_date = f"10-{mon_short}-{str(year)[2:]}" if is_payment_month else ""
-            amt      = amount_per_period if is_payment_month else 0.0
+        # Skip grace period entirely
+        if i < GRACE_MONTHS:
+            continue
 
+        months_active    = i - GRACE_MONTHS + 1
+        is_payment_month = (months_active % payment_interval == 0)
+
+        # Only add rows that have an actual payment
+        if is_payment_month:
+            last_day = calendar.monthrange(year, month_1based)[1]
+            pay_date = f"{last_day}/{month_1based}/{year}"
             schedule.append({
                 "mese":                       mese,
                 "data_pagamento_commissioni": pay_date,
-                "management_mensile":         f"{amt:.2f}" if amt else "",
-                "_amount":                    amt,
+                "management_mensile":         f"{amount_per_period:.2f}",
+                "_amount":                    amount_per_period,
             })
 
     return schedule
