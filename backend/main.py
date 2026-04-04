@@ -275,16 +275,106 @@ MONTHS_IT    = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
 MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun",
                 "Jul","Aug","Sep","Oct","Nov","Dec"]
 
-EMPTY_MONTHS = 5  # grace period — first 5 months always empty
+# EMPTY_MONTHS = 5  # grace period — first 5 months always empty
 
+
+# def fix_schedule(contract: dict) -> list:
+#     """
+#     Builds 12-month payment schedule purely from contract dict values.
+#     No hardcoded commission rates, no hardcoded amounts.
+#     """
+
+#     # ── 1. Contract start date ────────────────────────────────────────────────
+#     date_str = contract.get("data_contratto", "")
+#     try:
+#         dt      = datetime.strptime(date_str, "%d/%m/%Y")
+#         start_m = dt.month - 1   # 0-based
+#         start_y = dt.year
+#     except Exception:
+#         log.warning(f"Cannot parse date '{date_str}'")
+#         start_m, start_y = 0, 2026
+
+#     # ── 2. Import amount — direct from PDF, no fallback ───────────────────────
+#     importo = _parse_amount(str(contract.get("importo_contratto", "0")))
+#     if importo == 0:
+#         log.warning("importo_contratto is 0 — check PDF extraction")
+
+#     # ── 3. Annual commission % — direct from PDF ──────────────────────────────
+#     comm_annuale = _parse_amount(str(contract.get("commissioni_annuale", "0")))
+#     if comm_annuale == 0:
+#         log.warning("commissioni_annuale is 0 — check PDF extraction")
+
+#     # ── 4. Period percentage — direct from PDF ────────────────────────────────
+#     pct_periodo = _parse_amount(str(contract.get("percentuale_per_periodo", "0")))
+
+#     # If AI did not extract percentuale_per_periodo, calculate from frequency
+#     if pct_periodo == 0 and comm_annuale > 0:
+#         frequenza = str(contract.get("frequenza_pagamento", "semestrale")).lower()
+#         if "trim" in frequenza:
+#             pct_periodo = comm_annuale / 4
+#             log.info(f"Calculated trimestrale period %: {pct_periodo}")
+#         elif "ann" in frequenza:
+#             pct_periodo = comm_annuale
+#             log.info(f"Calculated annuale period %: {pct_periodo}")
+#         else:
+#             # default semestrale
+#             pct_periodo = comm_annuale / 2
+#             log.info(f"Calculated semestrale period %: {pct_periodo}")
+
+#     # ── 5. Amount paid each payment period ───────────────────────────────────
+#     amount_per_period = importo * (pct_periodo / 100)
+#     log.info(f"amount_per_period = {importo} × {pct_periodo}% = {amount_per_period}")
+
+#     # ── 6. Payment interval in months ────────────────────────────────────────
+#     frequenza = str(contract.get("frequenza_pagamento", "semestrale")).lower()
+#     if "trim" in frequenza:
+#         payment_interval = 3
+#     elif "ann" in frequenza:
+#         payment_interval = 12
+#     else:
+#         payment_interval = 6   # semestrale
+
+#     # ── 7. Build 12-month schedule ────────────────────────────────────────────
+#     schedule = []
+#     for i in range(12):
+#         total_months = start_m + i
+#         month_idx    = total_months % 12
+#         year         = start_y + total_months // 12
+#         mese         = MONTHS_IT[month_idx]
+#         mon_short    = MONTHS_SHORT[month_idx]
+
+#         if i < EMPTY_MONTHS:
+#             # Grace/startup period — no payment
+#             schedule.append({
+#                 "mese":                       mese,
+#                 "data_pagamento_commissioni": "",
+#                 "management_mensile":         "",
+#                 "_amount":                    0.0,
+#             })
+#         else:
+#             # Check if this month is a payment month
+#             months_active      = i - EMPTY_MONTHS + 1
+#             is_payment_month   = (months_active % payment_interval == 0)
+#             pay_date = f"10-{mon_short}-{str(year)[2:]}" if is_payment_month else ""
+#             amt      = amount_per_period if is_payment_month else 0.0
+
+#             schedule.append({
+#                 "mese":                       mese,
+#                 "data_pagamento_commissioni": pay_date,
+#                 "management_mensile":         f"{amt:.2f}" if amt else "",
+#                 "_amount":                    amt,
+#             })
+
+#     return schedule
+EMPTY_MONTHS = 2  # ~40 days grace = approximately 2 months
 
 def fix_schedule(contract: dict) -> list:
     """
-    Builds 12-month payment schedule purely from contract dict values.
-    No hardcoded commission rates, no hardcoded amounts.
+    Builds full payment schedule for the entire contract duration.
+    Uses durata_mesi from PDF — NOT hardcoded 12.
     """
 
-    # ── 1. Contract start date ────────────────────────────────────────────────
+    # ── 1. Contract start date ────────────────────────────────────────────
     date_str = contract.get("data_contratto", "")
     try:
         dt      = datetime.strptime(date_str, "%d/%m/%Y")
@@ -294,39 +384,39 @@ def fix_schedule(contract: dict) -> list:
         log.warning(f"Cannot parse date '{date_str}'")
         start_m, start_y = 0, 2026
 
-    # ── 2. Import amount — direct from PDF, no fallback ───────────────────────
+    # ── 2. Duration from PDF — NOT hardcoded ──────────────────────────────
+    durata_mesi = int(float(str(contract.get("durata_mesi", "12")).replace(",","."))) 
+    if durata_mesi <= 0:
+        durata_mesi = 12
+        log.warning("durata_mesi is 0 — defaulting to 12")
+
+    # ── 3. Import amount ──────────────────────────────────────────────────
     importo = _parse_amount(str(contract.get("importo_contratto", "0")))
     if importo == 0:
         log.warning("importo_contratto is 0 — check PDF extraction")
 
-    # ── 3. Annual commission % — direct from PDF ──────────────────────────────
+    # ── 4. Annual commission % ────────────────────────────────────────────
     comm_annuale = _parse_amount(str(contract.get("commissioni_annuale", "0")))
     if comm_annuale == 0:
         log.warning("commissioni_annuale is 0 — check PDF extraction")
 
-    # ── 4. Period percentage — direct from PDF ────────────────────────────────
+    # ── 5. Period percentage ──────────────────────────────────────────────
     pct_periodo = _parse_amount(str(contract.get("percentuale_per_periodo", "0")))
+    frequenza = str(contract.get("frequenza_pagamento", "semestrale")).lower()
 
-    # If AI did not extract percentuale_per_periodo, calculate from frequency
     if pct_periodo == 0 and comm_annuale > 0:
-        frequenza = str(contract.get("frequenza_pagamento", "semestrale")).lower()
         if "trim" in frequenza:
             pct_periodo = comm_annuale / 4
-            log.info(f"Calculated trimestrale period %: {pct_periodo}")
         elif "ann" in frequenza:
             pct_periodo = comm_annuale
-            log.info(f"Calculated annuale period %: {pct_periodo}")
         else:
-            # default semestrale
-            pct_periodo = comm_annuale / 2
-            log.info(f"Calculated semestrale period %: {pct_periodo}")
+            pct_periodo = comm_annuale / 2   # semestrale default
 
-    # ── 5. Amount paid each payment period ───────────────────────────────────
+    # ── 6. Amount per payment period ──────────────────────────────────────
     amount_per_period = importo * (pct_periodo / 100)
     log.info(f"amount_per_period = {importo} × {pct_periodo}% = {amount_per_period}")
 
-    # ── 6. Payment interval in months ────────────────────────────────────────
-    frequenza = str(contract.get("frequenza_pagamento", "semestrale")).lower()
+    # ── 7. Payment interval in months ────────────────────────────────────
     if "trim" in frequenza:
         payment_interval = 3
     elif "ann" in frequenza:
@@ -334,20 +424,17 @@ def fix_schedule(contract: dict) -> list:
     else:
         payment_interval = 6   # semestrale
 
-    # ── 7. Build 12-month schedule ────────────────────────────────────────────
+    # ── 8. Build FULL schedule (durata_mesi rows) ─────────────────────────
     schedule = []
-    # for i in range(12):
-    for i in range(int(contract.get("durata_mesi", 60))):
+    for i in range(durata_mesi):
         total_months = start_m + i
         month_idx    = total_months % 12
         year         = start_y + total_months // 12
-        # mese         = MONTHS_IT[month_idx]
-        mese = f"{MONTHS_IT[month_idx]} {year}"
-
+        mese         = MONTHS_IT[month_idx]
         mon_short    = MONTHS_SHORT[month_idx]
 
         if i < EMPTY_MONTHS:
-            # Grace/startup period — no payment
+            # Grace/startup period
             schedule.append({
                 "mese":                       mese,
                 "data_pagamento_commissioni": "",
@@ -355,9 +442,8 @@ def fix_schedule(contract: dict) -> list:
                 "_amount":                    0.0,
             })
         else:
-            # Check if this month is a payment month
-            months_active      = i - EMPTY_MONTHS + 1
-            is_payment_month   = (months_active % payment_interval == 0)
+            months_active    = i - EMPTY_MONTHS + 1
+            is_payment_month = (months_active % payment_interval == 0)
             pay_date = f"10-{mon_short}-{str(year)[2:]}" if is_payment_month else ""
             amt      = amount_per_period if is_payment_month else 0.0
 
