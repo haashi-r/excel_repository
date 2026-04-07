@@ -74,55 +74,7 @@ if "job_id" in st.session_state:
                 st.dataframe(df, use_container_width=True)
 
 
-# Add this section in app.py after Preview Data
-st.header("🔍 Debug — Raw AI Extraction")
 
-if "job_id" in st.session_state:
-    if st.button("🐛 Show Raw Extracted Data"):
-        response = requests.post(
-            f"{BASE_URL}/api/debug",
-            json={
-                "job_id": st.session_state["job_id"],
-                "data":   st.session_state["data"]
-            }
-        )
-        if response.status_code == 200:
-            debug_data = response.json()["debug"]
-            
-            for contract in debug_data:
-                st.subheader(f"Contract {contract['contract_number']}")
-                
-                # Show main fields in a clean table
-                col1, col2, col3, col4, col5 = st.columns(5)
-                col1.metric("Tipo",     contract["tipo_contratto"])
-                col2.metric("Data",     contract["data_contratto"])
-                col3.metric("Importo",  contract["importo_contratto"])
-                col4.metric("Comm %",   contract["commissioni"])
-                col5.metric("Mesi",     contract["total_months"])
-                
-                st.write(f"**Nome:** {contract['nome_cliente_segnalatore']}")
-                
-                # Show schedule with color coding
-                rows = []
-                for row in contract["payment_schedule"]:
-                    amt = row.get("management_mensile", "")
-                    rows.append({
-                        "✅ Mese":                       row.get("mese", ""),
-                        "✅ Data Pagamento Commissioni": row.get("data_pagamento_commissioni", "") or "—",
-                        "✅ Management Mensile":         amt or "—",
-                        "Status": "💰 PAID" if amt else "⏳ empty",
-                    })
-                
-                df = pd.DataFrame(rows)
-                st.dataframe(df, use_container_width=True)
-                
-                # Warn if months count is wrong
-                if contract["total_months"] != 12:
-                    st.error(f"⚠️ Wrong month count: {contract['total_months']} (should be 12)")
-                else:
-                    st.success(f"✅ Correct: exactly 12 months")
-        else:
-            st.error("Debug failed")
 # ─────────────────────────────
 # Generate DOCX
 # ─────────────────────────────
